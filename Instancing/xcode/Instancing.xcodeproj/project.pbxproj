@@ -18,6 +18,7 @@
 		00B9955B1B128DF400A5C623 /* IOSurface.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 00B995591B128DF400A5C623 /* IOSurface.framework */; };
 		19A99353ED2141DB9BE0BD63 /* CinderApp.icns in Resources */ = {isa = PBXBuildFile; fileRef = 6C28296826BA4EABA446D950 /* CinderApp.icns */; };
 		2C4725A81C80CF4C00822D5E /* assets in Resources */ = {isa = PBXBuildFile; fileRef = 2C4725A71C80CF4C00822D5E /* assets */; };
+		2C4725AB1C81471400822D5E /* Arrows.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 2C4725A91C81471400822D5E /* Arrows.cpp */; };
 		5323E6B20EAFCA74003A9687 /* CoreVideo.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 5323E6B10EAFCA74003A9687 /* CoreVideo.framework */; };
 		8D11072F0486CEB800E47090 /* Cocoa.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 1058C7A1FEA54F0111CA2CBB /* Cocoa.framework */; };
 		AFE8294DEE0747AFBC122C48 /* InstancingApp.cpp in Sources */ = {isa = PBXBuildFile; fileRef = DC35E7E51DD74C99B52467AB /* InstancingApp.cpp */; };
@@ -37,6 +38,8 @@
 		29B97324FDCFA39411CA2CEA /* AppKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AppKit.framework; path = /System/Library/Frameworks/AppKit.framework; sourceTree = "<absolute>"; };
 		29B97325FDCFA39411CA2CEA /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = /System/Library/Frameworks/Foundation.framework; sourceTree = "<absolute>"; };
 		2C4725A71C80CF4C00822D5E /* assets */ = {isa = PBXFileReference; lastKnownFileType = folder; name = assets; path = ../assets; sourceTree = "<group>"; };
+		2C4725A91C81471400822D5E /* Arrows.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = Arrows.cpp; path = ../src/Arrows.cpp; sourceTree = "<group>"; };
+		2C4725AA1C81471400822D5E /* Arrows.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = Arrows.h; path = ../src/Arrows.h; sourceTree = "<group>"; };
 		5323E6B10EAFCA74003A9687 /* CoreVideo.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = CoreVideo.framework; path = /System/Library/Frameworks/CoreVideo.framework; sourceTree = "<absolute>"; };
 		6C28296826BA4EABA446D950 /* CinderApp.icns */ = {isa = PBXFileReference; lastKnownFileType = image.icns; name = CinderApp.icns; path = ../resources/CinderApp.icns; sourceTree = "<group>"; };
 		8D1107320486CEB800E47090 /* Instancing.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Instancing.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -79,6 +82,8 @@
 			isa = PBXGroup;
 			children = (
 				DC35E7E51DD74C99B52467AB /* InstancingApp.cpp */,
+				2C4725A91C81471400822D5E /* Arrows.cpp */,
+				2C4725AA1C81471400822D5E /* Arrows.h */,
 			);
 			name = Source;
 			sourceTree = "<group>";
@@ -224,6 +229,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				AFE8294DEE0747AFBC122C48 /* InstancingApp.cpp in Sources */,
+				2C4725AB1C81471400822D5E /* Arrows.cpp in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
