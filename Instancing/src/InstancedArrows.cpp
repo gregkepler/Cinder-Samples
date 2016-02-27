@@ -10,7 +10,7 @@
 #include "cinder/gl/GlslProg.h"
 #include "cinder/Rand.h"
 #include "cinder/Log.h"
-#include "Arrows.h"
+#include "InstancedArrows.h"
 
 using namespace ci;
 using namespace ci::app;
@@ -38,7 +38,6 @@ InstancedArrows::InstancedArrows()
 
 
 	// CREATE instanced batch.
-
 	mShader = gl::GlslProg::create( loadAsset( "arrows.vert" ), loadAsset( "arrows.frag" ) );
 	mInstanceDataVbo = gl::Vbo::create( GL_ARRAY_BUFFER, instances.size() * sizeof( InstanceData ), instances.data(), GL_STATIC_DRAW );
 	auto mesh = gl::VboMesh::create( geom::Rect( Rectf( 0, 0, 1.0, 0.25 ) ) );
