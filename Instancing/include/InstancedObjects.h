@@ -1,6 +1,11 @@
 #pragma once
 
-typedef std::shared_ptr<class InstancedArrows>	InstancedArrowsRef;
+#include "cinder/Timeline.h"
+#include "Instanced.h"
+
+typedef std::shared_ptr<class InstancedArrows> InstancedArrowsRef;
+typedef std::shared_ptr<class InstancedDots>   InstancedDotsRef;
+
 
 // ------------------------------------------------------------------------------------------------- Properties for each unique arrow instance
 
@@ -86,4 +91,53 @@ class InstancedArrows {
 	bool					  mIsPaused = false;
 	
 	static const int kMaxCount = 30;
+};
+
+
+// ------------------------------------------------------------------------------------------------- Instanced Dots
+
+class InstancedDots {
+  public:
+	static InstancedDotsRef create() { return std::make_shared<InstancedDots>(); };
+	
+	InstancedDots();
+	~InstancedDots(){};
+	
+	class Dots : public InstancedBase {
+	  public:
+		typedef struct DotData {
+			ci::vec2 direction;
+			ci::vec3 color;
+			float    offset;
+		} DotData;
+
+	  public:
+		Dots();
+
+		void update( double elapsed = 0.0 );
+
+	  private:
+		ci::gl::GlslProgRef  mShader;
+		std::vector<DotData> mDotData;
+		double               mTime;
+		
+		static const int kMaxRows = 4;
+		static const int kDotsPerRow = 8;
+	};
+	
+	void update( double elapsed = 0.0 );
+	void draw();
+	
+  private:
+  
+	const int kViewportSize = 150;
+	
+	Dots			mDots;
+	ci::TimelineRef mTimeline;
+	ci::Anim<float> mScale, mAlpha;
+	float			mAlphaOffset;
+	
+	
+	ci::gl::Texture2dRef mTexture;
+	ci::CameraOrtho      mCamera;
 };

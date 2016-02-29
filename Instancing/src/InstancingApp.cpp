@@ -1,14 +1,12 @@
 #include "cinder/app/App.h"
 #include "cinder/app/RendererGl.h"
 #include "cinder/gl/gl.h"
-#include "InstancedArrows.h"
+#include "InstancedObjects.h"
 
 using namespace ci;
 using namespace ci::app;
 using namespace std;
 
-
-// ------------------------------------------------------------------------------------------------- Main app
 
 class InstancingApp : public App {
   public:
@@ -20,13 +18,19 @@ class InstancingApp : public App {
 	
   private:
 	InstancedArrowsRef mArrows;
+	InstancedDotsRef   mDots;
 	bool			   mIsPaused = false;
+	
+	typedef enum { MODE_ARROWS, MODE_DOTS } Mode;
+	Mode mMode;
 };
 
 
 void InstancingApp::setup()
 {
 	mArrows = InstancedArrows::create();
+	mDots = InstancedDots::create();
+	mMode = MODE_ARROWS;
 }
 
 
@@ -34,9 +38,17 @@ void InstancingApp::keyDown( KeyEvent event )
 {
 	switch( event.getCode() ) {
 	
-	case KeyEvent::KEY_SPACE:
-		mIsPaused = !mIsPaused;
-		break;
+		case KeyEvent::KEY_SPACE:
+			mIsPaused = !mIsPaused;
+			break;
+		
+		case KeyEvent::KEY_1:
+			mMode = MODE_ARROWS;
+			break;
+		
+		case KeyEvent::KEY_2:
+			mMode = MODE_DOTS;
+			break;
 	}
 }
 
@@ -58,7 +70,17 @@ void InstancingApp::update()
 	accumulator += math<double>::min( elapsed, 0.1 ); // prevents 'spiral of death'
 	while( accumulator >= timestep ) {
 		accumulator -= timestep;
-		mArrows->update( mIsPaused ? 0.0 : timestep );
+		double step  = mIsPaused ? 0.0 : timestep;
+		
+		switch( mMode ){
+			case MODE_ARROWS:
+				mArrows->update( step );
+				break;
+			
+			case MODE_DOTS:
+				mDots->update( step );
+				break;
+		}
 	}
 }
 
@@ -67,7 +89,15 @@ void InstancingApp::draw()
 {
 	gl::clear( Color( 0, 0, 0 ) );
 	
-	mArrows->draw();
+	switch( mMode ){
+		case MODE_ARROWS:
+			mArrows->draw();
+			break;
+		
+		case MODE_DOTS:
+			mDots->draw();
+			break;
+	}
 }
 
 CINDER_APP( InstancingApp, RendererGl( RendererGl::Options().msaa( 8 ) ) )

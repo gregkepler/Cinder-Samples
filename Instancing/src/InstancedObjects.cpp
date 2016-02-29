@@ -1,16 +1,13 @@
 //
-//  Arrows.cpp
-//  Instancing
-//
-//  Created by Greg Kepler on 2/26/16.
-//
+//  Instancing Objects
+//  Created by Greg Kepler
 //
 
 #include "cinder/app/App.h"
 #include "cinder/gl/GlslProg.h"
 #include "cinder/Rand.h"
 #include "cinder/Log.h"
-#include "InstancedArrows.h"
+#include "InstancedObjects.h"
 
 using namespace ci;
 using namespace ci::app;
@@ -120,4 +117,120 @@ void InstancedArrows::draw()
 		gl::ScopedTextureBind scpTex0( mArrowTexture, 0 );
 		mBatch->drawInstanced( kMaxCount );
 	}
+}
+
+
+// ------------------------------------------------------------------------------------------------- Instanced Dots
+
+
+// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -  Dots
+
+InstancedDots::Dots::Dots()
+    : InstancedBase( kDotsPerRow * kMaxRows )
+	, mTime( 0.0 )
+{
+	mShader = gl::GlslProg::create( loadAsset( "dots.vert" ), loadAsset( "dots.frag" ) );
+
+	createBatch( geom::Circle().radius( 3.0 ), mShader );
+
+	// blue dots
+	float rFactor = glm::radians( 360.0f / float( kDotsPerRow ) );
+	float rOffset = 0.0;
+	for( float i = 0.0; i < kDotsPerRow; ++i ) {
+		DotData d;
+		d.color = vec3( 0.35, 0.67, 0.97 );
+		d.direction = vec2( cos( ( rFactor * i ) + rOffset ), sin( ( rFactor * i ) + rOffset ) );
+		d.offset = 0.0;
+		mDotData.push_back( d );
+	}
+
+	// yellow dots
+	rOffset = -rFactor * 0.5;
+	for( float i = 0.0; i < kDotsPerRow; ++i ) {
+		DotData d;
+		d.color = vec3( 1.0, 1.0, 0.0 );
+		d.direction = vec2( cos( ( rFactor * i ) + rOffset ), sin( ( rFactor * i ) + rOffset ) );
+		d.offset = 1.0;
+		mDotData.push_back( d );
+	}
+
+	// orange dots
+	rOffset = 0.0;
+	for( float i = 0.0; i < kDotsPerRow; ++i ) {
+		DotData d;
+		d.color = vec3( 1.0, 0.47, 0.19 );
+		d.direction = vec2( cos( ( rFactor * i ) + rOffset ), sin( ( rFactor * i ) + rOffset ) );
+		d.offset = 2.0;
+		mDotData.push_back( d );
+	}
+	
+	// yellow dots
+	rOffset = -rFactor * 0.5;
+	for( float i = 0.0; i < kDotsPerRow; ++i ) {
+		DotData d;
+		d.color = vec3( 1.0, 1.0, 0.0 );
+		d.direction = vec2( cos( (rFactor * i) + rOffset ), sin( (rFactor * i) + rOffset ) );
+		d.offset = 3.0;
+		mDotData.push_back( d );
+	}
+
+}
+
+void InstancedDots::Dots::update( double elapsed )
+{
+	mTime += elapsed;
+	double progress = mTime;
+
+	auto ptr = (Data *)mDataVbo->mapReplace();
+	mInstanceCount = 0;
+	float maxDist = 60.0;
+	for( int i = 0; i < mMaxCount; ++i ) {
+		DotData d = mDotData[i];
+		
+		float distance = fmod( (0.25f * d.offset) + progress, 1.0f );
+		float alpha = 1.0f - fabs( ( distance * 2.0f ) - 1.0f );
+		vec2  pos = d.direction * vec2( distance * maxDist );
+		ptr->transform = glm::translate( vec3( pos, 0 ) );
+		ptr->transform *= glm::scale( vec3( alpha ) );
+
+		ptr->data = vec4( d.color, alpha );
+		ptr++;
+		mInstanceCount++;
+	}
+	mDataVbo->unmap();
+}
+
+
+// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - Instanced Dots (Parent)
+
+InstancedDots::InstancedDots()
+	: mAlpha( 1.0f )
+	, mScale( 1.0f )
+	, mAlphaOffset( 1.0 )
+{
+	mCamera.setOrtho( -50, 50, -50, 50, -10.0f, 1000.0f );
+	mCamera.lookAt( vec3( 0, 0, 100 ), vec3( 0, 0, 0 ), vec3( 0, 1, 0 ) );
+	mTimeline = Timeline::create();
+}
+
+void InstancedDots::update( double elapsed )
+{
+	mDots.update( elapsed );
+}
+
+void InstancedDots::draw()
+{
+	gl::ScopedColor    scpColor;
+	gl::ScopedMatrices scpMtrx;
+	gl::setMatrices( mCamera );
+	gl::scale( vec2( mScale() ) );
+	
+	Area vp = Area( ivec2(), ivec2( kViewportSize ) );
+	vp = Area::proportionalFit( vp, getWindowBounds(), true, false );
+	gl::ScopedViewport scpView( vp.getUL(), vp.getSize() );
+
+	gl::color( 1, 1, 1, mAlpha() * mAlphaOffset );
+	gl::ScopedBlendPremult scpBlend;
+
+	mDots.draw();
 }
