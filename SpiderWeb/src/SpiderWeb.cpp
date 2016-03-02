@@ -580,7 +580,7 @@ void SpiderWeb::reset()
 	mAnchors.clear();
 	mSubAnchors.clear();
 	mRays.clear();
-//	mWebCenter*/
+	mWebCenter = nullptr;
 	
 	// clear points
 	/*

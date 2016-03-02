@@ -130,8 +130,13 @@ SpiderWebApp::SpiderWebApp()
 
 void SpiderWebApp::reset()
 {
+	CI_LOG_V( "RESET" );
 	mWeb->reset();
 	mWeb = nullptr;
+	
+	mIterationIndex = 0;
+	mPositionBufTexs[0] = nullptr;
+	mPositionBufTexs[1] = nullptr;
 	generateWeb();
 }
 
@@ -154,7 +159,7 @@ void SpiderWebApp::generateWeb()
 void SpiderWebApp::setupBuffers()
 {
 	// reset
-	mIterationIndex = 0;
+	
 	/*mVaos[0] = nullptr;
 	mVaos[1] = nullptr;
 	mPositions[0] = nullptr;
