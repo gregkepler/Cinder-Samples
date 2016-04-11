@@ -27,7 +27,7 @@ static const float GUTTER = 10.0f;
 void WebRay::makePoints( ParticleRef webCenter, float avgLen, int pointCount )
 {
 	mWebCenter = webCenter;
-	std::vector<ci::vec2> points;							// array of points along the ray line
+	std::vector<ci::vec2> points;					// array of points along the ray line
 	mRayPointAmt = pointCount;						// amount of points along the array
 	
 	// Find the length and angle of current and next line
@@ -45,8 +45,8 @@ void WebRay::makePoints( ParticleRef webCenter, float avgLen, int pointCount )
 	// find the positions of all the points that will go on the given ray
 	for( int i = 0; i < mRayPointAmt-1; i++ ) {
 		float someNoise = lmap( glm::perlin( vec2(mNoise, 0) ), -1.0f, 1.0f, 0.75f, 1.25f );
-		vec2 pos = vec2( webCenter->getPosition().x + cos( mAngle ) * ( (i * pointSpacing) * someNoise),
-						 webCenter->getPosition().y + sin( mAngle ) * ( (i * pointSpacing) * someNoise) );
+		vec2 pos = vec2( webCenter->getPosition().x + cos( mAngle ) * ( (i * pointSpacing) * someNoise ),
+						 webCenter->getPosition().y + sin( mAngle ) * ( (i * pointSpacing) * someNoise ) );
 		ParticleRef p = Particle::create( pos );
 		mPoints.push_back( p );
 		mNoise += 0.2;
@@ -310,7 +310,6 @@ void SpiderWeb::make()
 	for( auto iter = mRays.begin(); iter != mRays.end(); ++iter ){
 		(*iter)->connectRay();
 	}
-	
 	
 	
 	// add all calculated points and strands to master array for the main app to grab

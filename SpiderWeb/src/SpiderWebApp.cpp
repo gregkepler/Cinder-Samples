@@ -68,11 +68,15 @@ class SpiderWebApp : public App {
 	
 	SpiderWebRef	mWeb;
 	int				mConnectionCount;
+//	bool			mResetting;
 	
 	std::array<gl::VaoRef, 2>			mVaos;
 	std::array<gl::VboRef, 2>			mPositions, mVelocities, mConnections, mConnectionLen;
 	std::array<gl::BufferTextureRef, 2>	mPositionBufTexs;
 	gl::VboRef							mLineIndices;
+	
+	gl::TransformFeedbackObjRef			mFeedbackObj[2];
+	
 	gl::GlslProgRef						mUpdateGlsl, mRenderGlsl;
 	uint32_t							mIterationsPerFrame, mIterationIndex;
 	CameraPersp							mCam;
@@ -82,7 +86,7 @@ class SpiderWebApp : public App {
 };
 
 SpiderWebApp::SpiderWebApp()
-: mIterationsPerFrame( 2 ), mIterationIndex( 0 ),
+: mIterationsPerFrame( 2 ), mIterationIndex( 1 ),
 	mCurrentCamRotation( 0.0f ),
 	mCam( getWindowWidth(), getWindowHeight(), 60.0f, 0.01f, 1000.0f )
 {
@@ -99,13 +103,13 @@ SpiderWebApp::SpiderWebApp()
 	mOptions->timestep( 0.2 );
 	
 	mParams->addParam( "spring constant", &mOptions->mSpringConstant ).min( 0.1f ).max( 20.5f ).keyIncr( "z" ).keyDecr( "Z" ).precision( 2 ).step( 0.25f ).updateFn(
-	[&](){
-		mUpdateGlsl->uniform( "k", mOptions->getSpringConstant() );
-	});
+		[&](){
+			mUpdateGlsl->uniform( "k", mOptions->getSpringConstant() );
+		});
 	mParams->addParam( "Gravity", &gravity ).updateFn(
-	[&](){
-		mUpdateGlsl->uniform( "gravity", gravity );
-	});
+		[&](){
+			mUpdateGlsl->uniform( "gravity", gravity );
+		});
 	mParams->addParam( "Damping Constant", &mOptions->mDamping ).min( 2.0f ).max( 25.0f ).precision( 2 ).step( 0.1f ).updateFn(
 		[&](){
 			mUpdateGlsl->uniform( "c", mOptions->getDamping() );
@@ -123,21 +127,62 @@ SpiderWebApp::SpiderWebApp()
 	
 	setupGlsl();
 	generateWeb();
+	setupBuffers();
 	
 	gl::enable( GL_LINE_SMOOTH );
+	
+//	mResetting = false;
 }
 
 
 void SpiderWebApp::reset()
 {
-	CI_LOG_V( "RESET" );
-	mWeb->reset();
-	mWeb = nullptr;
+//	if( ! mResetting ){
+		CI_LOG_V( "RESET" );
 	
-	mIterationIndex = 0;
-	mPositionBufTexs[0] = nullptr;
-	mPositionBufTexs[1] = nullptr;
-	generateWeb();
+		
+		mIterationIndex = 1;
+
+
+//		mPositionBufTexs[0].reset();
+//		mPositionBufTexs[1].reset();
+	
+//		mPositionBufTexs[0] = nullptr;
+//		mPositionBufTexs[1] = nullptr;
+	
+		mVaos[0].reset();
+		mVaos[1].reset();
+	
+		mVaos[0] = nullptr;
+		mVaos[1] = nullptr;
+		
+	//	mPositions[0] = nullptr;	// with these, we only get movement the first time around
+	//	mPositions[1] = nullptr;
+	//	mVelocities[0] = nullptr;
+	//	mVelocities[1] = nullptr;
+	//	mConnections[0] = nullptr;
+	//	mConnections[1] = nullptr;
+	//	mConnectionLen[0] = nullptr;
+	//	mConnectionLen[1] = nullptr;
+	//	mLineIndices = nullptr;
+		
+		// adding this gives us 3 rounds of movement
+		mPositions[0]->mapReplace();
+		mPositions[1]->mapReplace();
+		mVelocities[0]->mapReplace();
+		mVelocities[1]->mapReplace();
+		mConnections[0]->mapReplace();
+		mConnections[1]->mapReplace();
+		mConnectionLen[0]->mapReplace();
+		mConnectionLen[1]->mapReplace();
+		mLineIndices->mapReplace();
+	
+		// RESET and generate web
+		mWeb->reset();
+		mWeb = nullptr;
+		generateWeb();
+		setupBuffers();
+//	}
 }
 
 
@@ -152,8 +197,6 @@ void SpiderWebApp::generateWeb()
 		.raySpacing( randFloat( 80.0, 150.0) )
 	);
 	mWeb->make();
-	
-	setupBuffers();
 }
 
 void SpiderWebApp::setupBuffers()
@@ -248,6 +291,17 @@ void SpiderWebApp::setupBuffers()
 				gl::vertexAttribPointer( CONNECTION_LEN_INDEX, 4, GL_FLOAT, GL_FLOAT, 0, (const GLvoid*) 0 );
 				gl::enableVertexAttribArray( CONNECTION_LEN_INDEX );
 			}
+			
+			// Create a TransformFeedbackObj, which is similar to Vao
+			// It's used to capture the output of a glsl and uses the
+			// index of the feedback's varying variable names.
+			mFeedbackObj[i] = gl::TransformFeedbackObj::create();
+			// Bind the TransformFeedbackObj and bind each corresponding buffer
+			// to it's index.
+			mFeedbackObj[i]->bind();
+			gl::bindBufferBase( GL_TRANSFORM_FEEDBACK_BUFFER, POSITION_INDEX, mPositions[i] );
+			gl::bindBufferBase( GL_TRANSFORM_FEEDBACK_BUFFER, VELOCITY_INDEX, mVelocities[i] );
+			mFeedbackObj[i]->unbind();
 		}
 	}
 	// create your two BufferTextures that correspond to your position buffers.
@@ -339,31 +393,38 @@ void SpiderWebApp::updateRayPosition( const ci::ivec2 &mousePos, bool useDistanc
 
 void SpiderWebApp::update()
 {
+
 	gl::ScopedGlslProg	scopeGlsl( mUpdateGlsl );
 	gl::ScopedState		scopeState( GL_RASTERIZER_DISCARD, true );
 	
-	for( auto i = mIterationsPerFrame; i != 0; --i ) {
+	mIterationIndex = 1 - mIterationIndex;
+//	for( auto i = mIterationsPerFrame; i != 0; --i ) {
 		// Bind the vao that has the original vbo attached,
 		// these buffers will be used to read from.
-		gl::ScopedVao scopedVao( mVaos[mIterationIndex & 1] );
+		gl::ScopedVao scopedVao( mVaos[mIterationIndex] );
 		// Bind the BufferTexture, which contains the positions
 		// of the first vbo. We'll cycle through the neighbors
 		// using the connection buffer so that we can derive our
 		// next position and velocity to write to Transform Feedback
-		gl::ScopedTextureBind scopeTex( mPositionBufTexs[mIterationIndex & 1]->getTarget(), mPositionBufTexs[mIterationIndex & 1]->getId() );
-		
+//		gl::ScopedTextureBind scopeTex();
+//		mPositionBufTexs[mIterationIndex]->bindTexture();
+
+//		gl::ScopedTextureBind scopeTex( mPositionBufTexs[mIterationIndex]->getTarget(), mPositionBufTexs[mIterationIndex]->getId() );
+	
 		// We iterate our index so that we'll be using the
 		// opposing buffers to capture the data
-		mIterationIndex++;
-		
+//		mIterationIndex++
+	
 		// Now bind our opposing buffers to the correct index
 		// so that we can capture the values coming from the shader
-		gl::bindBufferBase( GL_TRANSFORM_FEEDBACK_BUFFER, POSITION_INDEX, mPositions[mIterationIndex & 1] );
-		gl::bindBufferBase( GL_TRANSFORM_FEEDBACK_BUFFER, VELOCITY_INDEX, mVelocities[mIterationIndex & 1] );
+//		gl::bindBufferBase( GL_TRANSFORM_FEEDBACK_BUFFER, POSITION_INDEX, mPositions[mIterationIndex & 1] );
+//		gl::bindBufferBase( GL_TRANSFORM_FEEDBACK_BUFFER, VELOCITY_INDEX, mVelocities[mIterationIndex & 1] );
 		
 		// Begin Transform feedback with the correct primitive,
 		// In this case, we want GL_POINTS, because each vertex
 		// exists by itself
+	
+		mFeedbackObj[1-mIterationIndex]->bind();
 		gl::beginTransformFeedback( GL_POINTS );
 		// Now we issue our draw command which puts all of the
 		// setup in motion and processes all the vertices
@@ -371,7 +432,11 @@ void SpiderWebApp::update()
 		// After that we issue an endTransformFeedback command
 		// to tell OpenGL that we're finished capturing vertices
 		gl::endTransformFeedback();
-	}
+	
+//		mPositionBufTexs[mIterationIndex]->unbindTexture();
+	
+		
+//	}
 }
 
 void SpiderWebApp::draw()
@@ -389,7 +454,7 @@ void SpiderWebApp::draw()
 	// Notice that this vao holds the buffers we've just
 	// written to with Transform Feedback. It will show
 	// the most recent positions
-	gl::ScopedVao scopeVao( mVaos[mIterationIndex & 1] );
+	gl::ScopedVao scopeVao( mVaos[1-mIterationIndex] );
 	gl::ScopedGlslProg scopeGlsl( mRenderGlsl );
 //	gl::setMatrices( mCam );
 	gl::setDefaultShaderVars();

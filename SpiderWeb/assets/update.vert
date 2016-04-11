@@ -18,7 +18,7 @@ layout (location = 3) in vec4 connectionLen;	// CONNECTION_LEN_INDEX
 // position_mass input attribute
 uniform samplerBuffer tex_position;
 
-uniform vec3 rayPosition;
+uniform vec3 rayPosition = vec3(100.0, 100.0, 0.0 );
 uniform float ciElapsedSeconds;
 
 // The outputs of the vertex shader are the same as the inputs
@@ -95,7 +95,7 @@ void main(void)
 	
 	// If this is a fixed node, reset force to zero
 	if( fixed_node ) {
-		F = vec3(0.0);
+//		F = vec3(0.0);
 	}
 	
 	// Accelleration due to force
