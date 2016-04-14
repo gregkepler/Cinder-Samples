@@ -9,6 +9,8 @@
 #include "cinder/Arcball.h"
 #include "cinder/Sphere.h"
 
+//#include "cinder/MayaCamUI.h"
+
 using namespace ci;
 using namespace ci::app;
 using namespace std;
@@ -29,6 +31,7 @@ class GeometryAndLightsApp : public App {
 	gl::BatchRef	mWireBatch, mSphereBatch;
 	CameraPersp		mCam;
 	CameraUi		mCamUi;
+//	MayaCamUI		mMayaCam;
 	Sphere			mBoundingSphere;
 	
 	vec2			mPtLightRot1;
