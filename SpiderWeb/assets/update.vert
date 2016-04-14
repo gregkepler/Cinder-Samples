@@ -95,7 +95,7 @@ void main(void)
 	
 	// If this is a fixed node, reset force to zero
 	if( fixed_node ) {
-//		F = vec3(0.0);
+		F = vec3(0.0);
 	}
 	
 	// Accelleration due to force

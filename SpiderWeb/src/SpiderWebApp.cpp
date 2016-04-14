@@ -5,6 +5,7 @@
 #include "cinder/gl/BufferTexture.h"
 #include "cinder/Log.h"
 #include "cinder/params/Params.h"
+#include "cinder/perlin.h"
 #include "SpiderWeb.h"
 
 using namespace ci;
@@ -16,6 +17,7 @@ const uint32_t POSITION_INDEX		= 0;
 const uint32_t VELOCITY_INDEX		= 1;
 const uint32_t CONNECTION_INDEX		= 2;
 const uint32_t CONNECTION_LEN_INDEX	= 3;
+const uint32_t COLOR_INDEX			= 4;
 
 typedef class Options {
 	public:
@@ -59,6 +61,8 @@ class SpiderWebApp : public App {
 	void mouseDown( MouseEvent event ) override;
 	void mouseDrag( MouseEvent event ) override;
 	void mouseUp( MouseEvent event ) override;
+	void keyDown( KeyEvent event ) override;
+	
 	void updateRayPosition( const ci::ivec2 &mousePos, bool useDistance );
 	
 	void reset();
@@ -68,10 +72,9 @@ class SpiderWebApp : public App {
 	
 	SpiderWebRef	mWeb;
 	int				mConnectionCount;
-//	bool			mResetting;
 	
 	std::array<gl::VaoRef, 2>			mVaos;
-	std::array<gl::VboRef, 2>			mPositions, mVelocities, mConnections, mConnectionLen;
+	std::array<gl::VboRef, 2>			mPositions, mVelocities, mConnections, mConnectionLen, mColors;
 	std::array<gl::BufferTextureRef, 2>	mPositionBufTexs;
 	gl::VboRef							mLineIndices;
 	
@@ -83,10 +86,12 @@ class SpiderWebApp : public App {
 	float								mCurrentCamRotation;
 	params::InterfaceGlRef				mParams;
 	std::shared_ptr<Options>			mOptions;
+	
+	gl::TextureRef						mTreesBg;
 };
 
 SpiderWebApp::SpiderWebApp()
-: mIterationsPerFrame( 2 ), mIterationIndex( 1 ),
+: mIterationsPerFrame( 5 ), mIterationIndex( 0 ),
 	mCurrentCamRotation( 0.0f ),
 	mCam( getWindowWidth(), getWindowHeight(), 60.0f, 0.01f, 1000.0f )
 {
@@ -125,30 +130,25 @@ SpiderWebApp::SpiderWebApp()
 	mParams->addSeparator();
 	mParams->addButton( "Randomize Web", bind( &SpiderWebApp::reset, this ) );
 	
+	mTreesBg = gl::Texture::create( loadImage( loadAsset( "trees.jpg" ) ) );
+	
 	setupGlsl();
 	generateWeb();
 	setupBuffers();
-	
-	gl::enable( GL_LINE_SMOOTH );
-	
-//	mResetting = false;
 }
 
 
 void SpiderWebApp::reset()
 {
-//	if( ! mResetting ){
-		CI_LOG_V( "RESET" );
 	
-		
-		mIterationIndex = 1;
+		mIterationIndex = 0;
 
 
-//		mPositionBufTexs[0].reset();
-//		mPositionBufTexs[1].reset();
+		mPositionBufTexs[0].reset();
+		mPositionBufTexs[1].reset();
 	
-//		mPositionBufTexs[0] = nullptr;
-//		mPositionBufTexs[1] = nullptr;
+		mPositionBufTexs[0] = nullptr;
+		mPositionBufTexs[1] = nullptr;
 	
 		mVaos[0].reset();
 		mVaos[1].reset();
@@ -182,7 +182,6 @@ void SpiderWebApp::reset()
 		mWeb = nullptr;
 		generateWeb();
 		setupBuffers();
-//	}
 }
 
 
@@ -193,29 +192,14 @@ void SpiderWebApp::generateWeb()
 	mWeb = SpiderWeb::create( SpiderWeb::Options()
 		.anchorCount( randInt(3, 8) )
 		.radiusBase( getWindowWidth() / 2.0 )
-		.rayPointCount( 20 )
-		.raySpacing( randFloat( 80.0, 150.0) )
+		.rayPointCount( randInt( 20, 50 ) )
+		.raySpacing( randFloat( 20.0, 150.0) )
 	);
 	mWeb->make();
 }
 
 void SpiderWebApp::setupBuffers()
 {
-	// reset
-	
-	/*mVaos[0] = nullptr;
-	mVaos[1] = nullptr;
-	mPositions[0] = nullptr;
-	mPositions[1] = nullptr;
-	mVelocities[0] = nullptr;
-	mVelocities[1] = nullptr;
-	mConnections[0] = nullptr;
-	mConnections[1] = nullptr;
-	mConnectionLen[0] = nullptr;
-	mConnectionLen[1] = nullptr;
-	mLineIndices = nullptr;
-	mPositionBufTexs[0] = nullptr;
-	mPositionBufTexs[1] = nullptr;*/
 	
 	// get all of the points from the spider web
 	
@@ -224,9 +208,11 @@ void SpiderWebApp::setupBuffers()
 	std::array<vec3, MAX_POINTS> velocities;
 	std::array<ivec4, MAX_POINTS> connections;
 	std::array<vec4, MAX_POINTS> connectionLen;
+	std::array<vec4, MAX_POINTS> colors;
 	
 	vector<ParticleRef> webPoints = mWeb->getPoints();
 	int n = 0;
+	Perlin p = Perlin();
 	for( auto iter = webPoints.begin(); iter != webPoints.end(); ++iter ) {
 		auto point = (*iter);
 		vec2 pos = point->getPosition();
@@ -234,7 +220,6 @@ void SpiderWebApp::setupBuffers()
 		positions[point->getId()] = vec4(
 			pos.x, pos.y,
 			0.0,
-//			randFloat() );
 			1.0f );
 		// zero out velocities
 		velocities[point->getId()] = vec3( 0.0f );
@@ -252,6 +237,13 @@ void SpiderWebApp::setupBuffers()
 			connectionLen[n][i] = distance( pos, connection->getPosition() );
 		}
 		n++;
+		
+		// DEFINE alpha - helps make the line thickness look a bit varied
+		float x = pos.x / getWindowWidth();
+		float y = pos.y / getWindowHeight();
+		float a = p.fBm( x, y ) * 2.0;
+		a += 0.35;
+		colors[point->getId()] = vec4( vec3( 1.0 ), a );
 	}
 	
 	for ( int i = 0; i < 2; i++ ) {
@@ -292,6 +284,15 @@ void SpiderWebApp::setupBuffers()
 				gl::enableVertexAttribArray( CONNECTION_LEN_INDEX );
 			}
 			
+			// buffer the colors
+			mColors[i] = gl::Vbo::create( GL_ARRAY_BUFFER, colors.size() * sizeof(vec4), colors.data(), GL_STATIC_DRAW );
+			{
+				// bind and explain the vbo to your vao so that it knows how to distribute vertices to your shaders.
+				gl::ScopedBuffer scopeBuffer( mColors[i] );
+				gl::vertexAttribPointer( COLOR_INDEX, 4, GL_FLOAT, GL_FALSE, 0, (const GLvoid*) 0 );
+				gl::enableVertexAttribArray( COLOR_INDEX );
+			}
+			
 			// Create a TransformFeedbackObj, which is similar to Vao
 			// It's used to capture the output of a glsl and uses the
 			// index of the feedback's varying variable names.
@@ -313,13 +314,15 @@ void SpiderWebApp::setupBuffers()
 	mConnectionCount = lines;
 	// create the indices to draw links between the cloth points
 	mLineIndices = gl::Vbo::create( GL_ELEMENT_ARRAY_BUFFER, lines * 2 * sizeof(int), nullptr, GL_STATIC_DRAW );
-//
+
 	auto e = (int *) mLineIndices->mapReplace();
 	for( auto iter = strands.begin(); iter != strands.end(); ++iter ){
 		auto strand = *iter;
 		*e++ = strand.first->getId();
 		*e++ = strand.second->getId();
 	}
+	
+	
 	mLineIndices->unmap();
 }
 
@@ -375,6 +378,15 @@ void SpiderWebApp::mouseUp( MouseEvent event )
 	updateRayPosition( event.getPos(), false );
 }
 
+void SpiderWebApp::keyDown( KeyEvent event )
+{
+	switch( event.getCode() ){
+		case KeyEvent::KEY_r:
+			reset();
+			break;
+	}
+}
+
 void SpiderWebApp::updateRayPosition( const ci::ivec2 &mousePos, bool useDistance )
 {
 //	auto ray = mCam.generateRay( mousePos, getWindowSize() );
@@ -397,11 +409,11 @@ void SpiderWebApp::update()
 	gl::ScopedGlslProg	scopeGlsl( mUpdateGlsl );
 	gl::ScopedState		scopeState( GL_RASTERIZER_DISCARD, true );
 	
-	mIterationIndex = 1 - mIterationIndex;
-//	for( auto i = mIterationsPerFrame; i != 0; --i ) {
+//	mIterationIndex = 1 - mIterationIndex;
+	for( auto i = mIterationsPerFrame; i != 0; --i ) {
 		// Bind the vao that has the original vbo attached,
 		// these buffers will be used to read from.
-		gl::ScopedVao scopedVao( mVaos[mIterationIndex] );
+		gl::ScopedVao scopedVao( mVaos[mIterationIndex & 1] );
 		// Bind the BufferTexture, which contains the positions
 		// of the first vbo. We'll cycle through the neighbors
 		// using the connection buffer so that we can derive our
@@ -413,7 +425,7 @@ void SpiderWebApp::update()
 	
 		// We iterate our index so that we'll be using the
 		// opposing buffers to capture the data
-//		mIterationIndex++
+		mIterationIndex++;
 	
 		// Now bind our opposing buffers to the correct index
 		// so that we can capture the values coming from the shader
@@ -424,7 +436,7 @@ void SpiderWebApp::update()
 		// In this case, we want GL_POINTS, because each vertex
 		// exists by itself
 	
-		mFeedbackObj[1-mIterationIndex]->bind();
+		mFeedbackObj[mIterationIndex & 1]->bind();
 		gl::beginTransformFeedback( GL_POINTS );
 		// Now we issue our draw command which puts all of the
 		// setup in motion and processes all the vertices
@@ -436,7 +448,7 @@ void SpiderWebApp::update()
 //		mPositionBufTexs[mIterationIndex]->unbindTexture();
 	
 		
-//	}
+	}
 }
 
 void SpiderWebApp::draw()
@@ -444,17 +456,26 @@ void SpiderWebApp::draw()
 	gl::clear( Color( 0, 0, 0 ) );
 	gl::enableAlphaBlending();
 	
+//	gl::enable( GL_LINE_SMOOTH );
+//	gl::enable (GL_BLEND);
+//	glBlendFunc( GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA );
+//	glHint( GL_LINE_SMOOTH_HINT, GL_NICEST );
+	
+
+	
+	
 //	gl::setMatrices( mCam );
 	{
 		gl::ScopedColor color;
-		gl::color(1, 1, 1, 0.2);
+		gl::color(1, 1, 1, 0.5);
+		gl::draw( mTreesBg, getWindowBounds() );
 //		mWeb->draw();
 	}
 	
 	// Notice that this vao holds the buffers we've just
 	// written to with Transform Feedback. It will show
 	// the most recent positions
-	gl::ScopedVao scopeVao( mVaos[1-mIterationIndex] );
+	gl::ScopedVao scopeVao( mVaos[mIterationIndex & 1] );
 	gl::ScopedGlslProg scopeGlsl( mRenderGlsl );
 //	gl::setMatrices( mCam );
 	gl::setDefaultShaderVars();
@@ -463,8 +484,8 @@ void SpiderWebApp::draw()
 	
 	
 	// draw points
-	gl::pointSize( 3.0f);
-	gl::drawArrays( GL_POINTS, 0, MAX_POINTS );
+//	gl::pointSize( 3.0f);
+//	gl::drawArrays( GL_POINTS, 0, MAX_POINTS );
 	
 	// draw lines
 	gl::ScopedBuffer scopeBuffer( mLineIndices );
@@ -473,7 +494,7 @@ void SpiderWebApp::draw()
 	mParams->draw();
 }
 
-CINDER_APP( SpiderWebApp, RendererGl(),
+CINDER_APP( SpiderWebApp, RendererGl( RendererGl::Options().msaa( 16 ) ),
 [&]( App::Settings *settings ) {
 	settings->setWindowSize( 1024, 768 );
 })

@@ -351,7 +351,7 @@ void SpiderWeb::addAchors()
 	// generate anchors
 	for( int i = 0; i < anchorCount; i++ )
 	{
-		float angle = ( i * angleDiff );
+		float angle = ( i * angleDiff ) + randFloat( -0.5, 0.5 );
 		float r = mOptions.getRadiusBase() * (randFloat() + 0.5);
 		radiusSum += r;
 		float pX = getWindowCenter().x + cos( angle ) * r;
