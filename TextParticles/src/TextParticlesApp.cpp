@@ -5,12 +5,13 @@
 #include "cinder/CameraUi.h"
 #include "cinder/Log.h"
 #include "cinder/Rand.h"
+#include "cinder/Timeline.h"
 
 using namespace ci;
 using namespace ci::app;
 using namespace std;
 
-const int COUNT_X = 450;	// make this same as window width
+const int COUNT_X = 350;	// make this same as window width
 const int COUNT_Y = 100;	// make this the same as text max height
 const int PARTICLE_NUM = COUNT_X * COUNT_Y;
 
@@ -21,6 +22,8 @@ struct Particle
 	vec3	ppos;
 	ColorA  color;
 	float	damping;
+	vec2	texcoord;
+	float	invmass;
 };
 
 class TextParticlesApp : public App {
@@ -50,6 +53,7 @@ class TextParticlesApp : public App {
 	gl::TextureFontRef	mTextureFont;
 	string				mString;
 	gl::FboRef			mTextFbo;
+	vec2				mTextSize;
 	
 	gl::GlslProgRef		mUpdateProg, mRenderProg;
 	gl::TextureRef		mStaticNoiseTex, mPerlin3dTex;
@@ -61,6 +65,8 @@ class TextParticlesApp : public App {
 	ci::Surface32f		mOrigPosSurf, mOrigVelSurf;
 	gl::VboMeshRef		mVboMesh;
 	ci::Surface8u		mTextSurf;
+	
+	ci::Anim<float>		mStep;
 	
 	
 	// Descriptions of particle data layout.
@@ -119,12 +125,14 @@ void TextParticlesApp::setup()
 	mRenderProg = gl::getStockShader( gl::ShaderDef().color() );
 	mUpdateProg = gl::GlslProg::create( gl::GlslProg::Format().vertex( loadAsset( "shaders/particleUpdate.vs" ) )
 			.feedbackFormat( GL_INTERLEAVED_ATTRIBS )
-			.feedbackVaryings( { "position", "pposition", "home", "color", "damping" } )
+			.feedbackVaryings( { "position", "pposition", "home", "color", "damping", "texcoord", "invmass" } )
 			.attribLocation( "iPosition", 0 )
 			.attribLocation( "iColor", 1 )
 			.attribLocation( "iPPosition", 2 )
 			.attribLocation( "iHome", 3 )
 			.attribLocation( "iDamping", 4 )
+			.attribLocation( "iTexCoord", 5 )
+			.attribLocation( "iInvMass", 6 )
 			);
 	
 	
@@ -190,6 +198,10 @@ void TextParticlesApp::setupPingPongFbo()
 
 void TextParticlesApp::setupVBO()
 {
+	if( mString.length() == 0 )
+		return;
+	
+	mStep = 1.0;
 	int w = COUNT_X, h = COUNT_Y;
 	int totalParticles = w * h;
 	
@@ -202,24 +214,39 @@ void TextParticlesApp::setupVBO()
 	// We want to change the position of the particles
 	// need tex coord to determine which particle
 	
+	vec3 center = vec3( mTextSize.x/2.0f, mTextSize.y/2.0f, -10.0 );
+//	vec3 center = vec3( mTextSize.x/2.0f, 0.0, -10.0 );
+	
+//	CI_LOG_V( center );
 	for( int i = 0; i < particles.size(); ++i )
 	{	// assign starting values to particles.
 		int x = i % w;
 		int y = floor( float(i) / float(w) );
 		int z = 1.0;
+		vec3 pos = vec3( x, y, z );
+		vec3 dir = normalize(pos - center);
+//		vec3 offsetVel = ( dir * ( Rand::randVec3() * vec3( 0.01 ) ) );
+		vec3 offsetVel = ( dir * vec3( 10.0 ) );
+//		vec3 offsetVel = ( dir * ( Rand::randVec3() * vec3( 1.0 ) ) );
+//		CI_LOG_V( pos << " " << dir << " " << offsetVel );
 		
 		ColorA color = mTextSurf.getPixel( ivec2(x, y) );
 		
 		auto &p = particles.at( i );
-		p.pos = vec3( x, y, z );
+		p.pos = pos;
+		p.texcoord = vec2( float(x) / float(w), float(y) / float(h) );
 		p.home = p.pos;
 //		p.ppos = Rand::randVec3() * 10.0f; // random initial velocity
-		p.ppos = p.pos + ( Rand::randVec3() * vec3( 0.01 ) );
+//		p.ppos = p.pos + ( Rand::randVec3() * vec3( 0.01 ) );
+//		p.ppos = p.pos + offsetVel;		// THIS gives reverse dark side of the moon like movement
+		p.ppos = p.pos - offsetVel;
 //		p.ppos = p.pos;
 //		p.damping = Rand::randFloat( 0.965f, 0.985f );
 		p.damping = Rand::randFloat( 0.55f, 0.6f );
+//		p.damping = Rand::randFloat( 0.3f, 0.5f );
 //		p.color = ColorA( 1, 1, 1, 1 );
 		p.color = ColorA( Color(color), 1);
+		p.invmass = Rand::randFloat( 0.1f, 1.0f );
 //		if( color.r > 0)
 //			CI_LOG_V( x << " - " << y << " " << color );
 	}
@@ -241,11 +268,15 @@ void TextParticlesApp::setupVBO()
 		gl::enableVertexAttribArray( 2 );
 		gl::enableVertexAttribArray( 3 );
 		gl::enableVertexAttribArray( 4 );
-		gl::vertexAttribPointer( 0, 3, GL_FLOAT, GL_FALSE, sizeof(Particle), (const GLvoid*)offsetof(Particle, pos) );
-		gl::vertexAttribPointer( 1, 4, GL_FLOAT, GL_FALSE, sizeof(Particle), (const GLvoid*)offsetof(Particle, color) );
-		gl::vertexAttribPointer( 2, 3, GL_FLOAT, GL_FALSE, sizeof(Particle), (const GLvoid*)offsetof(Particle, ppos) );
-		gl::vertexAttribPointer( 3, 3, GL_FLOAT, GL_FALSE, sizeof(Particle), (const GLvoid*)offsetof(Particle, home) );
-		gl::vertexAttribPointer( 4, 1, GL_FLOAT, GL_FALSE, sizeof(Particle), (const GLvoid*)offsetof(Particle, damping) );
+		gl::enableVertexAttribArray( 5 );
+		gl::enableVertexAttribArray( 6 );
+		gl::vertexAttribPointer( 0, 3, GL_FLOAT, GL_FALSE, sizeof(Particle), (const GLvoid*)offsetof(Particle, pos ) );
+		gl::vertexAttribPointer( 1, 4, GL_FLOAT, GL_FALSE, sizeof(Particle), (const GLvoid*)offsetof(Particle, color ) );
+		gl::vertexAttribPointer( 2, 3, GL_FLOAT, GL_FALSE, sizeof(Particle), (const GLvoid*)offsetof(Particle, ppos ) );
+		gl::vertexAttribPointer( 3, 3, GL_FLOAT, GL_FALSE, sizeof(Particle), (const GLvoid*)offsetof(Particle, home ) );
+		gl::vertexAttribPointer( 4, 1, GL_FLOAT, GL_FALSE, sizeof(Particle), (const GLvoid*)offsetof(Particle, damping ) );
+		gl::vertexAttribPointer( 5, 2, GL_FLOAT, GL_FALSE, sizeof(Particle), (const GLvoid*)offsetof(Particle, texcoord ) );
+		gl::vertexAttribPointer( 6, 1, GL_FLOAT, GL_FALSE, sizeof(Particle), (const GLvoid*)offsetof(Particle, invmass ) );
 	}
 	
 
@@ -292,6 +323,7 @@ void TextParticlesApp::setupVBO()
 	mVboMesh->bufferTexCoords2d( 0, texCoords );
 	mVboMesh->unbindBuffers();
 */
+	timeline().apply( &mStep, 1.0f, 100.0f, 1.0f );
 	mActive = true;
 }
 
@@ -370,13 +402,23 @@ void TextParticlesApp::update()
 	if( !mActive )
 		return;
 	
+//	mStep = 10.0;
 	
+	
+
 	// Update particles on the GPU
 	gl::ScopedGlslProg prog( mUpdateProg );
 	gl::ScopedState rasterizer( GL_RASTERIZER_DISCARD, true );	// turn off fragment stage
+	mStaticNoiseTex->bind(0);
+	mPerlin3dTex->bind(1);
+	mUpdateProg->uniform( "uNoiseTex", 0 );
+	mUpdateProg->uniform( "uPerlinTex", 1 );
+	
 //	mUpdateProg->uniform( "uMouseForce", mMouseForce );
 //	mUpdateProg->uniform( "uMousePos", mMousePos );
-
+//	CI_LOG_V( mStep.value() );
+	mUpdateProg->uniform( "uStep", mStep.value() );
+	
 	// Bind the source data (Attributes refer to specific buffers).
 	gl::ScopedVao source( mAttributes[mSourceIndex] );
 	// Bind destination as buffer base.
@@ -388,7 +430,10 @@ void TextParticlesApp::update()
 	gl::drawArrays( GL_POINTS, 0, PARTICLE_NUM );
 
 	gl::endTransformFeedback();
-
+	
+	mStaticNoiseTex->unbind();
+	mPerlin3dTex->unbind();
+	
 	// Swap source and destination for next loop
 	std::swap( mSourceIndex, mDestinationIndex );
 }
@@ -406,7 +451,7 @@ void TextParticlesApp::drawTextToFbo()
 		vec2 stringSize = mTextureFont->measureString( mString );
 		float descent = mTextureFont->getDescent();
 		float ascent = mTextureFont->getAscent();
-//		mTextureFont->get
+		mTextSize = stringSize + vec2( 0, descent );
 
 	//	gl::ScopedMatrices scpMatrx;
 	//	mTextureFont->drawString( mString, stringSize * vec2( -0.5, 0 ) );
@@ -426,8 +471,8 @@ void TextParticlesApp::drawTextToFbo()
 		gl::drawSolidRect( Rectf( 0, stringSize.y-descent, stringSize.x, stringSize.y ) );
 		// above ascent
 		gl::color( 0, 1, 0 );
-		gl::drawSolidRect( Rectf( 0, 0, stringSize.x, stringSize.y-ascent ) );
-		*/
+		gl::drawSolidRect( Rectf( 0, 0, stringSize.x, stringSize.y-ascent ) );*/
+		
 		
 		// string
 		gl::color(1, 1, 1);
@@ -494,22 +539,27 @@ void TextParticlesApp::draw()
 //		gl::drawSolidRect( Rectf( 0, 0, 10, 10 ) );
 //		gl::drawColorCube( vec3(), vec3( 10, 10, 10 ) );
 
+		gl::translate( mTextSize * vec2( -0.5 ) );
 		if( mActive ){
-			
 			gl::ScopedGlslProg render( mRenderProg );
 			gl::ScopedVao vao( mAttributes[mSourceIndex] );
 			gl::context()->setDefaultShaderVars();
 			gl::drawArrays( GL_POINTS, 0, PARTICLE_NUM );
+			
+		}else{
+			gl::draw( mTextFbo->getColorTexture() );
 		}
+//		gl::drawSolidRect( Rectf( 0, 0, mTextSize.x, mTextSize.y ) );
 	}
 	
 	
-	
-	
+
 	
 //	gl::color( 1, 1, 0 );
 //	gl::TextureRef tex = gl::Texture::create( mTextSurf );
 //	gl::draw( tex, vec2( 100, 0 ) );
 }
 
-CINDER_APP( TextParticlesApp, RendererGl )
+CINDER_APP( TextParticlesApp, RendererGl, [] ( App::Settings *settings ) {
+	settings->setWindowSize( 1280, 720 );
+}  )
