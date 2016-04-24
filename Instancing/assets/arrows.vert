@@ -21,7 +21,7 @@ out vec2 texCoord;
 void main(void)
 {
 	mat4 viewMatrix = ciModelView * vInstanceTransform;
-	vec4 vertPosition = viewMatrix * ciPosition	;
+	vec4 vertPosition = viewMatrix * ciPosition;
 	vertColor = vInstanceData * ciColor;
 	texCoord = ciTexCoord0 * vTexCoord.zw + vTexCoord.xy;
 

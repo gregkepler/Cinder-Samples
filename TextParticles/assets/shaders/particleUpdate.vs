@@ -46,48 +46,18 @@ void main()
 	damping = max( damping, 0 );	// min is 0
 	
 	vec3 perlin		= ( texture( uPerlinTex, texcoord * vec2( 5.0, 1.0 ) ).rgb * vec3( 2.0 ) ) - vec3(1.0);	// [-1.0,1.0]
-//	vec3 perlin
-//	vec3 perlin		= (texture( uNoiseTex, texcoord * vec2( 5.0, 1.0 ) ).rgb * 2.0) - 1.0;	// [-1.0,1.0]
-
-	
-//	vec3 acc = (home - position) * 32.0f;
-//	position += vel + acc * dt2;
-	
-	
-	
-	
-	
-//	vec4 p0			= texture( positions, texCoord );
-//	float invmass	= p0.a;
-	
-//	vec4 v0			= texture( velocities, texCoord );
-//	float texAlpha	= v0.a;
 	
 
 //	vec3 newV		= texture( uPerlinTex, texcoord * vec2( 5.0, 1.0 ) ).rgb * 2.0 - 1.0;
 //	float noiseVal	= texture( uNoiseTex, texcoord ).r;
 //	vec3 acc = direction + perlin;
-	vec3 acc = direction + (perlin * uStep);
+	vec3 acc = direction + ((perlin * invmass) * uStep);
 	
-
-	/*vec3 force = position.xyz - vec3( 0.0 );			// Calculate direction of force
-    float d = length( force );					// Distance between objects
-	d = normalize(d);
-	force = normalize(force);					// Normalize vector (distance doesn't matter here, we just want this vector for direction
-	
-	float strength = invmass / (d * d);			// Calculate gravitational force magnitude
-	force *= ( 1.0 * strength );
-	*/
-//	float animDelay	= max( uTime * 4.0 -  texcoord.s - noiseVal, 0.0 );
-	
-//	vec3 v1 = ( vel.xyz + perlin * invmass ) * animDelay;
-	vec3 v1 = vel.xyz + acc;//( v0.xyz + perlin * invmass ) * animDelay;
+	vec3 v1 = vel.xyz + acc;
 	v1 *= damping;
-	
-//	vec3 v1 = ( vel.xyz + perlin * invmass ) * animDelay;
-//	vec3 v1 = (vel.xyz * perlin * invmass) * animDelay;
+
 	vec3 p1 = position.xyz + v1;
 	
 	position = p1;
-//	gl_FragData[1] = vec4( v1, texAlpha ); //alpha component used for coloring
+	color.a = clamp( damping * 2.0, 0.0, 1.0 );
 }

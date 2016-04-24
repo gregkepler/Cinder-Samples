@@ -11,7 +11,7 @@ using namespace ci;
 using namespace ci::app;
 using namespace std;
 
-const int COUNT_X = 350;	// make this same as window width
+const int COUNT_X = 600;	// make this same as window width
 const int COUNT_Y = 100;	// make this the same as text max height
 const int PARTICLE_NUM = COUNT_X * COUNT_Y;
 
@@ -41,7 +41,6 @@ class TextParticlesApp : public App {
 	
 	void textToTexture();
 	void lookAtTexture( const CameraPersp &cam, const ci::vec2 &size );
-	void setupPingPongFbo();
 	void setupVBO();
 	
 	double				mTimer, mTextTimer;
@@ -59,7 +58,6 @@ class TextParticlesApp : public App {
 	gl::TextureRef		mStaticNoiseTex, mPerlin3dTex;
 	
 	bool				mActive;
-//	gl::TextureRef		mTextTexture;
 
 	// store original position and texture so that we can reset everything later
 	ci::Surface32f		mOrigPosSurf, mOrigVelSurf;
@@ -84,17 +82,12 @@ class TextParticlesApp : public App {
 
 void TextParticlesApp::setup()
 {
-	// LOAD fonts
-	
 	// SET UP camera
 	mCam  = CameraPersp( getWindowWidth(), getWindowHeight(), 60, 1.0, 1000.0  );
-//	mCam.setPerspective( 60, getWindowAspectRatio(), 1, 1000 );
-//	gl::setMatricesWindowPersp( getWindowWidth(), getWindowHeight() );
-//	mCam.setEyePoint( vec3( 0, 0, 10.0 ) );
-//	mCam.lookAt( vec3() );
 	mCamUi = CameraUi( &mCam );
 	
-//	Font( loadAsset( "SourceSansPro-Bold.ttf" ), 16 );
+
+	// LOAD fonts
 	mFont = Font( loadAsset( "SourceSansPro-Bold.ttf" ), 80 );
 	mTextureFont = gl::TextureFont::create( mFont );
 	
@@ -137,64 +130,8 @@ void TextParticlesApp::setup()
 	
 	
 	mActive = false;
-//	mTextSurface = textSurf;
-//	mTextTexture = gl::Texture::create( mTextSurface );
-//	mSize = mTextTexture->getSize() * 0.5;
-	
-//	mString = "TEST";
-//	drawTextToFbo();
-	setupPingPongFbo();
-
-//	setupVBO();
-	
 }
 
-void TextParticlesApp::setupPingPongFbo()
-{
-	/*std::vector<Surface32f> surfaces;
-	
-	int w = 500, h = 500;
-	// Position 2D texture array
-	surfaces.push_back( Surface32f( w, h, true ) );
-	// We don't need to do below because these are the positions that we want. We just want a grid. For now
-	Surface32f::Iter pixelIter = surfaces[0].getIter();
-	while( pixelIter.line() ) {
-		while( pixelIter.pixel() ) {
-			// Initial particle positions are passed in as R,G,B
-			// float values. Alpha is used as particle invMass.
-			float invMass = Rand::randFloat( 0.1f, 1.0f );
-			surfaces[0].setPixel( pixelIter.getPos(),
-								  ColorAf( pixelIter.getPos().x - ( w / 2 ),
-								  pixelIter.getPos().y - ( h / 2 ),
-								  0.0,
-								  invMass ) );
-		}
-	}
-	mOrigPosSurf = surfaces[0].clone();
-
-	//Velocity 2D texture array
-	surfaces.push_back( Surface32f( w, h, true ) );
-	pixelIter = surfaces[1].getIter();
-	while( pixelIter.line() ) {
-		while( pixelIter.pixel() ) {
-			// Initial particle velocities are
-			// passed in as R,G,B float values.
-			// texture alpha is in alpha value
-			//            surfaces[1].setPixel( pixelIter.getPos(), ColorAf( 0.0f, 0.0f, 0.0f, 1.0f ) );
-			float textureColor = mTextSurface.getPixel( pixelIter.getPos() * ivec2( 2 ) ).a;
-			if( textureColor > 0 )
-				textureColor = 1.0;
-			else
-				textureColor = 0.0;
-			surfaces[1].setPixel( pixelIter.getPos(), ColorAf( 0.0f, 0.0f, 0.0f, textureColor ) );
-		}
-	}
-	
-//	console() << "pixel 1" << mTextSurface.getPixel( Vec2i::zero() ) << endl;
-	mOrigVelSurf = surfaces[1].clone();
-
-	mParticlesFboRef = std::make_shared<PingPongFbo>( surfaces );*/
-}
 
 void TextParticlesApp::setupVBO()
 {
@@ -208,16 +145,12 @@ void TextParticlesApp::setupVBO()
 	vector<Particle> particles;
 	particles.assign( totalParticles, Particle() );
 	
-	// turn fbo texture into surface
-	
-	
 	// We want to change the position of the particles
 	// need tex coord to determine which particle
 	
 	vec3 center = vec3( mTextSize.x/2.0f, mTextSize.y/2.0f, -10.0 );
 //	vec3 center = vec3( mTextSize.x/2.0f, 0.0, -10.0 );
 	
-//	CI_LOG_V( center );
 	for( int i = 0; i < particles.size(); ++i )
 	{	// assign starting values to particles.
 		int x = i % w;
@@ -242,8 +175,8 @@ void TextParticlesApp::setupVBO()
 		p.ppos = p.pos - offsetVel;
 //		p.ppos = p.pos;
 //		p.damping = Rand::randFloat( 0.965f, 0.985f );
-		p.damping = Rand::randFloat( 0.55f, 0.6f );
-//		p.damping = Rand::randFloat( 0.3f, 0.5f );
+//		p.damping = Rand::randFloat( 0.55f, 0.6f );
+		p.damping = Rand::randFloat( 0.3f, 0.5f );
 //		p.color = ColorA( 1, 1, 1, 1 );
 		p.color = ColorA( Color(color), 1);
 		p.invmass = Rand::randFloat( 0.1f, 1.0f );
@@ -280,49 +213,6 @@ void TextParticlesApp::setupVBO()
 	}
 	
 
-	
-
-/*
-	// create some geometry using a geom::Plane
-	auto plane = geom::Plane().size( vec2( 500, 500 ) ).subdivisions( ivec2( 200, 50 ) );
-
-	// Specify two planar buffers - positions are dynamic because they will be modified
-	// in the update() loop. Tex Coords are static since we don't need to update them.
-	vector<gl::VboMesh::Layout> bufferLayout = {
-		gl::VboMesh::Layout().usage( GL_DYNAMIC_DRAW ).attrib( geom::Attrib::POSITION, 3 ),
-		gl::VboMesh::Layout().usage( GL_STATIC_DRAW ).attrib( geom::Attrib::TEX_COORD_0, 2 ),
-		gl::VboMesh::Layout().usage( GL_STATIC_DRAW ),attib( geom::Attrib::)
-	};
-
-	mVboMesh = gl::VboMesh::create( plane, bufferLayout );
-	
-	
-	//	app::console() << "SET UP VBO" << endl;
-
-	//  A dummy VboMesh the same size as the
-	// texture to keep the vertices on the GPU
-	
-	vector<vec2> texCoords;
-	vector<uint32_t> indices;
-	gl::VboMesh::Layout layout;
-	gl::VboRef indexVbo = gl::Vbo::create(<#GLenum target#>, <#const std::vector<T> &v#>)
-
-	layout.setStaticIndices();
-	layout.setStaticPositions();
-	layout.setStaticTexCoords2d();
-	layout.setStaticNormals();
-	glPointSize( 1.0f );
-	mVboMesh = gl::VboMesh::create( totalVertices, totalVertices, layout, GL_POINTS );
-	for( int x = 0; x < w; ++x ) {
-		for( int y = 0; y < h; ++y ) {
-			indices.push_back( x * h + y );
-			texCoords.push_back( vec2( x / w, y / h ) );
-		}
-	}
-	mVboMesh->bufferIndices( indices );
-	mVboMesh->bufferTexCoords2d( 0, texCoords );
-	mVboMesh->unbindBuffers();
-*/
 	timeline().apply( &mStep, 1.0f, 100.0f, 1.0f );
 	mActive = true;
 }
@@ -377,34 +267,36 @@ void TextParticlesApp::keyDown( KeyEvent event )
 			break;
 		
 		case KeyEvent::KEY_BACKSPACE:
+			mActive = false;
+	
+			if( mString.length() > 0 ){
+				mString.pop_back();
+			}
 			// REMOVE last character
 			drawTextToFbo();
 
 			break;
 		
 		default:
-			if( event.getChar() ){
+			if( event.isControlDown() && event.getCode() == KeyEvent::KEY_r ){
+				mActive = false;
+			}
+			else if( event.getChar() ){
+				
+				mActive = false;
 				// ADD new character
 				mString.append( string( 1, event.getChar() ) );
 				drawTextToFbo();
-	//			CI_LOG_V( mString );
-	//			setupVBO();eg
-				CI_LOG_V( "mString\t\t\t| " << mString );
 			}
 			
 		break;
 	}
-	
 }
 
 void TextParticlesApp::update()
 {
 	if( !mActive )
 		return;
-	
-//	mStep = 10.0;
-	
-	
 
 	// Update particles on the GPU
 	gl::ScopedGlslProg prog( mUpdateProg );
@@ -413,10 +305,6 @@ void TextParticlesApp::update()
 	mPerlin3dTex->bind(1);
 	mUpdateProg->uniform( "uNoiseTex", 0 );
 	mUpdateProg->uniform( "uPerlinTex", 1 );
-	
-//	mUpdateProg->uniform( "uMouseForce", mMouseForce );
-//	mUpdateProg->uniform( "uMousePos", mMousePos );
-//	CI_LOG_V( mStep.value() );
 	mUpdateProg->uniform( "uStep", mStep.value() );
 	
 	// Bind the source data (Attributes refer to specific buffers).
@@ -428,7 +316,6 @@ void TextParticlesApp::update()
 	// Draw source into destination, performing our vertex transformations.
 
 	gl::drawArrays( GL_POINTS, 0, PARTICLE_NUM );
-
 	gl::endTransformFeedback();
 	
 	mStaticNoiseTex->unbind();
@@ -453,12 +340,8 @@ void TextParticlesApp::drawTextToFbo()
 		float ascent = mTextureFont->getAscent();
 		mTextSize = stringSize + vec2( 0, descent );
 
-	//	gl::ScopedMatrices scpMatrx;
-	//	mTextureFont->drawString( mString, stringSize * vec2( -0.5, 0 ) );
-		vec2 centerPos = (size * vec2( 0.5 )) + (stringSize * vec2( -0.5, 0 ) );
-		CI_LOG_V( stringSize.y << " " << ascent << " " << descent );
-//		mTextureFont->drawString( mString,  centerPos );
 		
+		// OPTIONALLY, draw the text metrics
 		/*
 		// string size - RED
 		gl::color(1, 0, 0);
@@ -478,9 +361,7 @@ void TextParticlesApp::drawTextToFbo()
 		gl::color(1, 1, 1);
 		mTextureFont->drawString( mString, vec2( 0, stringSize.y - descent ) );
 	}
-//	mTextSurf = Surface( mTextFbo->getColorTexture()->createSource() );
 	mTextSurf = Surface( mTextFbo->readPixels8u( mTextFbo->getBounds() ) );
-
 }
 
 void TextParticlesApp::lookAtTexture( const CameraPersp &cam, const ci::vec2 &size  )
@@ -547,7 +428,8 @@ void TextParticlesApp::draw()
 			gl::drawArrays( GL_POINTS, 0, PARTICLE_NUM );
 			
 		}else{
-			gl::draw( mTextFbo->getColorTexture() );
+			if( mString.length() > 0 )
+				gl::draw( mTextFbo->getColorTexture() );
 		}
 //		gl::drawSolidRect( Rectf( 0, 0, mTextSize.x, mTextSize.y ) );
 	}
