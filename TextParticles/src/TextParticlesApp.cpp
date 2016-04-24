@@ -6,19 +6,15 @@
 #include "cinder/Log.h"
 #include "cinder/Rand.h"
 #include "cinder/Timeline.h"
+#include "cinder/params/Params.h"
 
 using namespace ci;
 using namespace ci::app;
 using namespace std;
 
-const int COUNT_X = 600;	// make this same as window width
-const int COUNT_Y = 100;	// make this the same as text max height
-const int PARTICLE_NUM = COUNT_X * COUNT_Y;
-
 struct Particle
 {
 	vec3	pos;
-	vec3	home;
 	vec3	ppos;
 	ColorA  color;
 	float	damping;
@@ -39,7 +35,6 @@ class TextParticlesApp : public App {
 	void draw() override;
 	void drawTextToFbo();
 	
-	void textToTexture();
 	void lookAtTexture( const CameraPersp &cam, const ci::vec2 &size );
 	void setupVBO();
 	
@@ -53,6 +48,7 @@ class TextParticlesApp : public App {
 	string				mString;
 	gl::FboRef			mTextFbo;
 	vec2				mTextSize;
+	int					mTextParticleCount;
 	
 	gl::GlslProgRef		mUpdateProg, mRenderProg;
 	gl::TextureRef		mStaticNoiseTex, mPerlin3dTex;
@@ -77,6 +73,14 @@ class TextParticlesApp : public App {
 	std::uint32_t	mSourceIndex		= 0;
 	std::uint32_t	mDestinationIndex	= 1;
 	
+	// params
+	params::InterfaceGlRef	mParams;
+	vec3					mCenter;
+	float					mStartVelocity;
+	float					mStepMax;
+	float					mDampingSpeed;
+	float					mDampingBase;
+	
 	
 };
 
@@ -88,7 +92,7 @@ void TextParticlesApp::setup()
 	
 
 	// LOAD fonts
-	mFont = Font( loadAsset( "SourceSansPro-Bold.ttf" ), 80 );
+	mFont = Font( loadAsset( "SourceSansPro-Bold.ttf" ), 100 );
 	mTextureFont = gl::TextureFont::create( mFont );
 	
 	mTextFbo = gl::Fbo::create( getWindowWidth(), getWindowHeight(), true );
@@ -118,16 +122,29 @@ void TextParticlesApp::setup()
 	mRenderProg = gl::getStockShader( gl::ShaderDef().color() );
 	mUpdateProg = gl::GlslProg::create( gl::GlslProg::Format().vertex( loadAsset( "shaders/particleUpdate.vs" ) )
 			.feedbackFormat( GL_INTERLEAVED_ATTRIBS )
-			.feedbackVaryings( { "position", "pposition", "home", "color", "damping", "texcoord", "invmass" } )
+			.feedbackVaryings( { "position", "pposition", "color", "damping", "texcoord", "invmass" } )
 			.attribLocation( "iPosition", 0 )
 			.attribLocation( "iColor", 1 )
 			.attribLocation( "iPPosition", 2 )
-			.attribLocation( "iHome", 3 )
-			.attribLocation( "iDamping", 4 )
-			.attribLocation( "iTexCoord", 5 )
-			.attribLocation( "iInvMass", 6 )
+			.attribLocation( "iDamping", 3 )
+			.attribLocation( "iTexCoord", 4 )
+			.attribLocation( "iInvMass", 5 )
 			);
 	
+	
+	// set up params
+	mCenter = vec3( 0, 0, -10.0 );
+	mStartVelocity = 10.0;
+	mStepMax = 10.0;
+	mDampingSpeed = 0.004;
+	mDampingBase = 0.3f;
+	
+	mParams = params::InterfaceGl::create( app::getWindow(), "Params", vec2( 400, 200 ) );
+	mParams->addParam( "Center", &mCenter ).updateFn( bind( &TextParticlesApp::setupVBO, this ) );
+	mParams->addParam( "Start Velocity", &mStartVelocity ).updateFn( bind( &TextParticlesApp::setupVBO, this ) );
+	mParams->addParam( "Step Max", &mStepMax );
+	mParams->addParam( "Damping Speed", &mDampingSpeed ).precision( 4 ).step( 0.0005 ).min( 0.0 ).max( 0.04 );
+	mParams->addParam( "Damping Base", &mDampingBase ).precision( 2 ).step( 0.05 ).min( 0.0 ).max( 1.0 );
 	
 	mActive = false;
 }
@@ -139,8 +156,9 @@ void TextParticlesApp::setupVBO()
 		return;
 	
 	mStep = 1.0;
-	int w = COUNT_X, h = COUNT_Y;
+	int w = mTextSize.x, h = mTextSize.y;
 	int totalParticles = w * h;
+	mTextParticleCount = totalParticles;
 	
 	vector<Particle> particles;
 	particles.assign( totalParticles, Particle() );
@@ -148,27 +166,22 @@ void TextParticlesApp::setupVBO()
 	// We want to change the position of the particles
 	// need tex coord to determine which particle
 	
-	vec3 center = vec3( mTextSize.x/2.0f, mTextSize.y/2.0f, -10.0 );
-//	vec3 center = vec3( mTextSize.x/2.0f, 0.0, -10.0 );
 	
+//	vec3 center = vec3( mTextSize.x/2.0f, 0.0, -10.0 );
+	vec3 center = vec3(mTextSize.x/2.0f, mTextSize.y/2.0f, 0 ) + mCenter;
 	for( int i = 0; i < particles.size(); ++i )
 	{	// assign starting values to particles.
 		int x = i % w;
 		int y = floor( float(i) / float(w) );
 		int z = 1.0;
 		vec3 pos = vec3( x, y, z );
-		vec3 dir = normalize(pos - center);
-//		vec3 offsetVel = ( dir * ( Rand::randVec3() * vec3( 0.01 ) ) );
-		vec3 offsetVel = ( dir * vec3( 10.0 ) );
-//		vec3 offsetVel = ( dir * ( Rand::randVec3() * vec3( 1.0 ) ) );
-//		CI_LOG_V( pos << " " << dir << " " << offsetVel );
-		
-		ColorA color = mTextSurf.getPixel( ivec2(x, y) );
+		vec3 dir = normalize( pos - center );
+		vec3 offsetVel = ( dir * vec3( mStartVelocity ) );
+		ColorA color = mTextSurf.getPixel( ivec2( x, y ) );
 		
 		auto &p = particles.at( i );
 		p.pos = pos;
 		p.texcoord = vec2( float(x) / float(w), float(y) / float(h) );
-		p.home = p.pos;
 //		p.ppos = Rand::randVec3() * 10.0f; // random initial velocity
 //		p.ppos = p.pos + ( Rand::randVec3() * vec3( 0.01 ) );
 //		p.ppos = p.pos + offsetVel;		// THIS gives reverse dark side of the moon like movement
@@ -176,7 +189,7 @@ void TextParticlesApp::setupVBO()
 //		p.ppos = p.pos;
 //		p.damping = Rand::randFloat( 0.965f, 0.985f );
 //		p.damping = Rand::randFloat( 0.55f, 0.6f );
-		p.damping = Rand::randFloat( 0.3f, 0.5f );
+		p.damping = Rand::randFloat( mDampingBase, mDampingBase + 0.2f );
 //		p.color = ColorA( 1, 1, 1, 1 );
 		p.color = ColorA( Color(color), 1);
 		p.invmass = Rand::randFloat( 0.1f, 1.0f );
@@ -202,24 +215,17 @@ void TextParticlesApp::setupVBO()
 		gl::enableVertexAttribArray( 3 );
 		gl::enableVertexAttribArray( 4 );
 		gl::enableVertexAttribArray( 5 );
-		gl::enableVertexAttribArray( 6 );
 		gl::vertexAttribPointer( 0, 3, GL_FLOAT, GL_FALSE, sizeof(Particle), (const GLvoid*)offsetof(Particle, pos ) );
 		gl::vertexAttribPointer( 1, 4, GL_FLOAT, GL_FALSE, sizeof(Particle), (const GLvoid*)offsetof(Particle, color ) );
 		gl::vertexAttribPointer( 2, 3, GL_FLOAT, GL_FALSE, sizeof(Particle), (const GLvoid*)offsetof(Particle, ppos ) );
-		gl::vertexAttribPointer( 3, 3, GL_FLOAT, GL_FALSE, sizeof(Particle), (const GLvoid*)offsetof(Particle, home ) );
-		gl::vertexAttribPointer( 4, 1, GL_FLOAT, GL_FALSE, sizeof(Particle), (const GLvoid*)offsetof(Particle, damping ) );
-		gl::vertexAttribPointer( 5, 2, GL_FLOAT, GL_FALSE, sizeof(Particle), (const GLvoid*)offsetof(Particle, texcoord ) );
-		gl::vertexAttribPointer( 6, 1, GL_FLOAT, GL_FALSE, sizeof(Particle), (const GLvoid*)offsetof(Particle, invmass ) );
+		gl::vertexAttribPointer( 3, 1, GL_FLOAT, GL_FALSE, sizeof(Particle), (const GLvoid*)offsetof(Particle, damping ) );
+		gl::vertexAttribPointer( 4, 2, GL_FLOAT, GL_FALSE, sizeof(Particle), (const GLvoid*)offsetof(Particle, texcoord ) );
+		gl::vertexAttribPointer( 5, 1, GL_FLOAT, GL_FALSE, sizeof(Particle), (const GLvoid*)offsetof(Particle, invmass ) );
 	}
 	
 
-	timeline().apply( &mStep, 1.0f, 100.0f, 1.0f );
+	timeline().apply( &mStep, 1.0f, mStepMax, 1.0f );
 	mActive = true;
-}
-
-void TextParticlesApp::textToTexture()
-{
-
 }
 
 void TextParticlesApp::mouseDown( MouseEvent event )
@@ -306,6 +312,7 @@ void TextParticlesApp::update()
 	mUpdateProg->uniform( "uNoiseTex", 0 );
 	mUpdateProg->uniform( "uPerlinTex", 1 );
 	mUpdateProg->uniform( "uStep", mStep.value() );
+	mUpdateProg->uniform( "uDampingSpeed", mDampingSpeed );
 	
 	// Bind the source data (Attributes refer to specific buffers).
 	gl::ScopedVao source( mAttributes[mSourceIndex] );
@@ -315,7 +322,7 @@ void TextParticlesApp::update()
 
 	// Draw source into destination, performing our vertex transformations.
 
-	gl::drawArrays( GL_POINTS, 0, PARTICLE_NUM );
+	gl::drawArrays( GL_POINTS, 0, mTextParticleCount );
 	gl::endTransformFeedback();
 	
 	mStaticNoiseTex->unbind();
@@ -384,48 +391,21 @@ void TextParticlesApp::draw()
 
 	{
 		gl::ScopedMatrices scpMtrx;
-//		gl::setMatrices( mCam );
-//		gl::setMatricesWindowPersp( getWindowWidth(), getWindowHeight(), 60, 1.0, 1000.0, true );
 		
 		// SET matrices so that by default, we are looking at a rect the size of the window
 		lookAtTexture( mCam, getWindowSize() );
-//		gl::translate( ivec2(-getWindowCenter()) );
-		
-//		gl::setMatr( getWindowWidth(), getWindowHeight() );
 		
 //		gl::ScopedDepth scpDepth(	true );
 	
 		gl::ScopedColor scpColor( 1, 0, 0 );
-		
-//		gl::drawSolidRect( Rectf( 10, 10, getWindowWidth() - 10, getWindowHeight() - 10 ) );
-
-
-//		gl::translate( vec3( 0, 0, 10.0 ) );
-//		gl::drawSolidRect( getWindowBounds() - getWindowCenter() );
-//		Rectf boundsRect( 40, mTextureFont->getAscent() + 40, getWindowWidth() - 40, getWindowHeight() - 40 );
-//		mTextureFont->drawString( "Hello", vec2() );
-		/*
-		{
-			vec2 stringSize = mTextureFont->measureString( mString );
-			gl::ScopedMatrices scpMatrx;
-//			gl::translate( stringSize * vec2( -0.5 ) );
-			mTextureFont->drawString( mString, stringSize * vec2( -0.5, 0 ) );
-		}
-		*/
-		
 		gl::color( Color::white() );
-//		gl::draw( mTextFbo->getColorTexture() );
-		
-//		mTextureFont->draw
-//		gl::drawSolidRect( Rectf( 0, 0, 10, 10 ) );
-//		gl::drawColorCube( vec3(), vec3( 10, 10, 10 ) );
 
 		gl::translate( mTextSize * vec2( -0.5 ) );
 		if( mActive ){
 			gl::ScopedGlslProg render( mRenderProg );
 			gl::ScopedVao vao( mAttributes[mSourceIndex] );
 			gl::context()->setDefaultShaderVars();
-			gl::drawArrays( GL_POINTS, 0, PARTICLE_NUM );
+			gl::drawArrays( GL_POINTS, 0, mTextParticleCount );
 			
 		}else{
 			if( mString.length() > 0 )
@@ -434,12 +414,7 @@ void TextParticlesApp::draw()
 //		gl::drawSolidRect( Rectf( 0, 0, mTextSize.x, mTextSize.y ) );
 	}
 	
-	
-
-	
-//	gl::color( 1, 1, 0 );
-//	gl::TextureRef tex = gl::Texture::create( mTextSurf );
-//	gl::draw( tex, vec2( 100, 0 ) );
+	mParams->draw();
 }
 
 CINDER_APP( TextParticlesApp, RendererGl, [] ( App::Settings *settings ) {
