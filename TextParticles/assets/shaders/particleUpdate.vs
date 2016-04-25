@@ -3,11 +3,12 @@
 uniform float uMouseForce;
 uniform vec3  uMousePos;
 
-uniform sampler2D	uNoiseTex;
 uniform sampler2D	uPerlinTex;
 uniform float		uTime = 1.0;
 uniform float		uStep = 1.0;
 uniform float		uDampingSpeed = 0.004;
+uniform vec3		uNoiseOffset = vec3( 1.0, 1.0, 0.0 );
+uniform vec3		uEndColor = vec3( 1.0, 1.0, 1.0 );
 
 in vec3   iPosition;
 in vec3   iPPosition;
@@ -33,28 +34,28 @@ void main()
 	color =     iColor;
 	texcoord =  iTexCoord;
 	invmass =	iInvMass;
-
-//	vec3 vel = (position - pposition) * damping;
-	vec3 vel = (position - pposition);
-	pposition = position;
-	vec3 direction = normalize( vel );
 	
+	vec3 vel	   = (position - pposition);
+	vec3 direction = normalize( vel );
+	vec3 perlin	   = ( texture( uPerlinTex, texcoord * uNoiseOffset.xy ).rgb * vec3( 2.0 ) ) - vec3(1.0);	// [-1.0,1.0]
+	vec3 acc	   = direction + ((perlin * invmass) * uStep);
+	
+	// UPDATE damping
 	damping -= uDampingSpeed;
 	damping = max( damping, 0 );	// min is 0
 	
-	vec3 perlin		= ( texture( uPerlinTex, texcoord * vec2( 1.0, 1.0 ) ).rgb * vec3( 2.0 ) ) - vec3(1.0);	// [-1.0,1.0]
+	// UPDATE velocity
+	vel += acc;
+	vel *= damping;
 	
-
-//	vec3 newV		= texture( uPerlinTex, texcoord * vec2( 5.0, 1.0 ) ).rgb * 2.0 - 1.0;
-//	float noiseVal	= texture( uNoiseTex, texcoord ).r;
-//	vec3 acc = direction + perlin;
-	vec3 acc = direction + ((perlin * invmass) * uStep);
+	// UPDATE position and previous position
+	pposition = position;
+	position += vel;
 	
-	vec3 v1 = vel.xyz + acc;
-	v1 *= damping;
-
-	vec3 p1 = position.xyz + v1;
-	
-	position = p1;
-	color.a = clamp( damping * 2.0, 0.0, 1.0 );
+	// UPDATE color
+	float a = clamp( damping * 2.0, 0.0, 1.0 );			// alpha
+	float colorVal = clamp((a * 2.0 ), 0.0, 1.0 );		// color value
+	vec3 newColor = (vec3(1) - uEndColor ) * vec3( colorVal );
+	color.rgb *= ( uEndColor + newColor );
+	color.a = a;
 }
