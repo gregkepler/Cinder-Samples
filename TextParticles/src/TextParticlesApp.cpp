@@ -43,6 +43,7 @@ class TextParticlesApp : public App {
 	void drawTextToFbo();
 	void lookAtTexture( const CameraPersp &cam, const ci::vec2 &size );
 	void setupVBO();
+	void editMode();
 	
 	CameraPersp			mCam;
 	CameraUi			mCamUi;
@@ -125,10 +126,10 @@ void TextParticlesApp::setup()
 	
 	// SET UP param defaults
 	mCenter			= vec3( 0, 0, -10.0 );
-	mStartVelocity	= 10.0;
+	mStartVelocity	= 5.0;
 	mStepMax		= 10.0;
-	mDampingSpeed	= 0.004;
-	mDampingBase	= 0.35f;
+	mDampingSpeed	= 0.003;
+	mDampingBase	= 0.45f;
 	mNoiseOffset	= vec3( 1.0f, 1.0f, 0.0 );
 	mEndColor		= Color( 1.0, 1.0, 1.0 );
 	
@@ -141,6 +142,8 @@ void TextParticlesApp::setup()
 	mParams->addParam( "Damping Base", &mDampingBase ).precision( 2 ).step( 0.05 ).min( 0.0 ).max( 1.0 );
 	mParams->addParam( "Noise Offset", &mNoiseOffset );
 	mParams->addParam( "EndColor", &mEndColor );
+	mParams->addButton( "Enter Edit Mode", bind( &TextParticlesApp::editMode, this ) );
+	mParams->addButton( "EXPLODE!", bind( &TextParticlesApp::setupVBO, this ) );
 	
 	mStep = 1.0;
 	mActive = false;
@@ -244,6 +247,12 @@ void TextParticlesApp::mouseDrag( MouseEvent event )
 }
 
 
+void TextParticlesApp::editMode()
+{
+	mActive = false;
+}
+
+
 void TextParticlesApp::keyDown( KeyEvent event )
 {
 	/*
@@ -261,7 +270,7 @@ void TextParticlesApp::keyDown( KeyEvent event )
 			break;
 		
 		case KeyEvent::KEY_BACKSPACE:
-			mActive = false;
+			editMode();
 	
 			// REMOVE last character
 			if( mString.length() > 0 ){
@@ -272,11 +281,11 @@ void TextParticlesApp::keyDown( KeyEvent event )
 		
 		default:
 			if( event.isControlDown() && event.getCode() == KeyEvent::KEY_r ){
-				mActive = false;
+				editMode();
 			}
 			else if( event.getChar() ){
 				
-				mActive = false;
+				editMode();
 				// ADD new character
 				mString.append( string( 1, event.getChar() ) );
 				drawTextToFbo();
