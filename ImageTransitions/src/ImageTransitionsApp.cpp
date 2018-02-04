@@ -338,4 +338,7 @@ void ImageTransitionsApp::draw()
 	// draw back with culled front
 }
 
-CINDER_APP( ImageTransitionsApp, RendererGl )
+CINDER_APP( ImageTransitionsApp, RendererGl( RendererGl::Options().msaa( 16 ) ),
+[&]( App::Settings *settings ) {
+   settings->setWindowSize( 1024, 768 );
+})

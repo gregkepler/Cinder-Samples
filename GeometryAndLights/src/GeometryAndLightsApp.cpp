@@ -9,11 +9,22 @@
 #include "cinder/Arcball.h"
 #include "cinder/Sphere.h"
 
-//#include "cinder/MayaCamUI.h"
 
 using namespace ci;
 using namespace ci::app;
 using namespace std;
+
+static const int NUM_LIGHTS = 1;
+
+struct Light {
+	ci::vec4 position;
+	ci::vec4 intensities; //a.k.a. the color of the light
+	float attenuation;
+	float ambientCoefficient;
+	ci::vec2 buffer;	// add a little sumpin sumpin to make sure the Light object adds up to 16 bytes
+};
+
+
 
 class GeometryAndLightsApp : public App {
   public:
@@ -31,14 +42,14 @@ class GeometryAndLightsApp : public App {
 	gl::BatchRef	mWireBatch, mSphereBatch;
 	CameraPersp		mCam;
 	CameraUi		mCamUi;
-//	MayaCamUI		mMayaCam;
 	Sphere			mBoundingSphere;
 	
+	std::vector<Light>	mLights;
+	ci::gl::UboRef		mUboLight;
+	
 	vec2			mPtLightRot1;
-	vec3			mPtLight1;
+	vec3			mPtLight1, mPtLight2;
 	Color			mPtLightCol1;
-	
-	
 };
 
 void prepareSettings( App::Settings* settings )
@@ -65,30 +76,57 @@ void GeometryAndLightsApp::setup()
 	
 	mPtLightRot1 = vec2( 0, 0 );
 	mPtLight1 = getRotation( mPtLightRot1, 1.25 );
+	
 	mPtLightCol1 = Color(1, 1, 0);
 
+	// define lights
+	Light light1;
+	light1.position = vec4();
+	light1.intensities = ColorA(ColorA8u( 35, 161, 176));
+//	light1.attenuation = 0.00001f;
+	light1.attenuation = 0.00001f;
+	light1.ambientCoefficient = 1.0f;
+	mLights.push_back( light1 );
+	
+	Light light2;
+	light2.position = vec4();
+	light2.intensities = ColorA::white();
+	light2.attenuation = 0.00001f;
+	light2.ambientCoefficient = 0.1f;
+	mLights.push_back( light2 );
+	
+	mUboLight = gl::Ubo::create( sizeof( Light ) * mLights.size(), mLights.data() );
+	mUboLight->bindBufferBase( 0 );
+	
+	
 //	Color ambient = Color8u(25, 41, 43	);
 	Color ambient = Color8u(16, 32, 30 );
 //	Color lightColor = Color8u( 108, 191, 163);
 	Color lightColor = Color8u( 35, 161, 176);
 	
 	mGlsl = gl::GlslProg::create( loadAsset( "shader.vert" ), loadAsset( "shader.frag" ) );
-	mGlsl->uniform( "uLightDirection", vec3( 0.5, 1.0, 0.75 ) );
-	mGlsl->uniform( "uLightColor", lightColor );
+//	mGlsl->uniform( "uLightDirection", vec3( 0.5, 1.0, 0.75 ) );
+//	mGlsl->uniform( "uLightColor", lightColor );
 	mGlsl->uniform( "uAmbient", ambient );
+//	mGlsl->uniform( "uMaterialShininess", 15.0f );
+//	mGlsl->uniform( "uNumLights", NUM_LIGHTS );
+//	mGlsl->uniformBlock( "Lights", 0 );
 	
 	auto format = gl::GlslProg::Format()
 			.vertex( loadAsset( "wireframe.vert" ) )
 			.geometry( loadAsset( "wireframe.geom" ) )
 			.fragment( loadAsset( "wireframe.frag" ) );
 	mWireframeGlsl = gl::GlslProg::create( format );
-	mWireframeGlsl->uniform( "uBrightness", 1.0f );
+//	mWireframeGlsl->uniform( "uBrightness", 1.0f );
 	mWireframeGlsl->uniform( "uViewportSize", vec2( getWindowSize() ) );
 	mWireframeGlsl->uniform( "uLightDirection", vec3( 0.0, 1.0, 0.0 ) );
 	mWireframeGlsl->uniform( "uLightColor", lightColor );
 	mWireframeGlsl->uniform( "uAmbient", ambient );
 	mWireframeGlsl->uniform( "uPointLight1", mPtLight1 );
 	mWireframeGlsl->uniform( "uPointLight1Color", mPtLightCol1 );
+	mWireframeGlsl->uniform( "uMaterialShininess", 15.0f );
+	mWireframeGlsl->uniform( "uNumLights", NUM_LIGHTS );
+	mWireframeGlsl->uniformBlock( "Lights", 0 );
 	
 	mWireBatch = gl::Batch::create( sphereMesh, mWireframeGlsl );
 	mSphereBatch = gl::Batch::create( sphereMesh, mGlsl );
@@ -148,6 +186,17 @@ void GeometryAndLightsApp::update()
 							sin( getElapsedSeconds() * 0.6 ) * 0.5 + 0.5,
 							1.0 - (cos( getElapsedSeconds() ) * 0.5 + 0.5));
 	mWireframeGlsl->uniform( "uPointLight1Color", mPtLightCol1 );
+	
+	// update lights ubo
+	Light* lights = (Light*) mUboLight->mapWriteOnly();
+	for ( auto lightObj : mLights ) {
+		lights->position = vec4( mat3( mCam.getViewMatrix() ) * mPtLight1, 1.0 );
+		lights->ambientCoefficient = lightObj.ambientCoefficient;
+		lights->attenuation = lightObj.attenuation;
+		lights->intensities = vec4( lightObj.intensities );
+		++lights;
+	}
+	mUboLight->unmap();
 }
 
 void GeometryAndLightsApp::draw()
@@ -172,13 +221,13 @@ void GeometryAndLightsApp::draw()
 		gl::ScopedFaceCulling cullScope( true, GL_FRONT );
 		gl::ScopedModelMatrix mtrx;
 
-		mWireframeGlsl->uniform( "uBrightness", 0.5f );
+//		mWireframeGlsl->uniform( "uBrightness", 0.5f );
 		mWireBatch->draw();
 
 		// Now render the front side.
 		gl::cullFace( GL_BACK );
 
-		mWireframeGlsl->uniform( "uBrightness", 1.0f );
+//		mWireframeGlsl->uniform( "uBrightness", 1.0f );
 		mWireBatch->draw();
 		
 	}

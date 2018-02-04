@@ -1,9 +1,10 @@
 #version 150
 
-uniform vec3 uAmbient;
+uniform mat4	ciModelView;
+uniform vec3	uAmbient;
 uniform vec3 uLightColor;
 uniform vec3 uLightDirection;
-uniform float uBrightness;
+//uniform float uBrightness;
 uniform float uShininess = 20.0;
 uniform float uStrength = 0.001; // extra factor to adjust shininess
 
@@ -13,6 +14,8 @@ uniform float ConstantAttenuation	= 1.0; // attenuation coefficients
 uniform float LinearAttenuation		= 1.0; // attenuation coefficients
 uniform float QuadraticAttenuation	= 0.1; // attenuation coefficients
 uniform vec3 uEyeDirection;
+uniform float	uMaterialShininess = 1.0;
+uniform vec3	uMaterialSpecularColor = vec3( 1.0, 1.0, 1.0 );
 
 in VertexData {
 	noperspective vec3 distance;
@@ -24,12 +27,35 @@ in VertexData {
 } vVertexIn;
 
 
+// array of lights
+#define MAX_LIGHTS 10
+uniform int uNumLights;
+struct Light
+{
+	vec4 position;
+	vec4 intensities; //a.k.a the color of the light
+	float attenuation;
+	float ambientCoefficient;
+};
+
+layout (std140) uniform Lights
+{
+	Light uLights[ MAX_LIGHTS ];
+};
+
+
 out vec4 oFragColor;
 
-vec3 pointLight( vec3 pos, vec3 normal, vec3 lightPos, vec3 lightColor )
+
+
+
+//vec3 pointLight( vec3 pos, vec3 normal, vec3 lightPos, vec3 lightColor )
+vec3 pointLight( vec3 pos, vec3 normal, Light light )
 {
 	// point light
-	vec3 lightDirection = lightPos - pos;
+//	vec3 lightPosition = mat3(ciModelView) * light.position.xyz;
+	vec3 lightPosition = light.position.xyz;
+	vec3 lightDirection = lightPosition - pos;
 	float lightDist = length( lightDirection );
 	lightDirection = lightDirection / lightDist;
 	float attenuation = 1.0 / ( ConstantAttenuation +
@@ -44,12 +70,75 @@ vec3 pointLight( vec3 pos, vec3 normal, vec3 lightPos, vec3 lightColor )
 		specular = 0.0;
 	else
 		specular = pow(specular, uShininess) * uStrength;
-	vec3 scatteredLight = lightColor * diffuse * attenuation;
-	vec3 reflectedLight = lightColor * specular * attenuation;
+	vec3 scatteredLight = light.intensities.rgb * diffuse * attenuation;
+	vec3 reflectedLight = light.intensities.rgb * specular * attenuation;
 	vec3 rgb = min(scatteredLight + reflectedLight, vec3(1.0));
 	
 	return rgb;
 }
+
+
+vec3 ApplyLight(Light light, vec3 surfaceColor, vec3 normal, vec3 surfaceModelPos, vec3 surfaceToCamera)
+{
+	
+	// lighting properties
+	vec3 lightPosition = light.position.xyz;
+	vec3 lightIntensities = light.intensities.rgb;
+	
+	//point light
+	vec3 surfaceToLight = normalize( lightPosition - surfaceModelPos );
+	float distanceToLight = length( lightPosition - surfaceModelPos );
+	float attenuation = 1.0 / (1.0 + light.attenuation * pow(distanceToLight, 2));
+	
+	//ambient
+	vec3 ambient = light.ambientCoefficient * surfaceColor.rgb * lightIntensities;
+//	vec3 ambient = 1.0 * surfaceColor.rgb * lightIntensities;
+	
+	//diffuse
+	float diffuseCoefficient = max(0.0, dot(normal, surfaceToLight));
+	vec3 diffuse = diffuseCoefficient * surfaceColor.rgb * lightIntensities;
+	
+	//specular
+	vec3 reflection = normalize(reflect(-surfaceToLight, normal));
+	float specularCoefficient = 0.0;
+	if(diffuseCoefficient > 0.0)
+		specularCoefficient = pow(max(0.0, dot(surfaceToCamera, reflection)), uStrength);
+	vec3 specular = specularCoefficient * uMaterialSpecularColor * lightIntensities;
+	
+	
+	//linear color (color before gamma correction)
+//	return ambient + (attenuation * (diffuse + specular));
+	return ambient + (diffuse);
+	
+	/*
+	
+	
+	////
+	// point light
+	vec3 lightPosition = mat3(ciModelView) * light.position.xyz;
+	vec3 lightIntensities = light.intensities.rgb;
+	vec3 lightDirection = lightPosition - surfaceModelPos;
+	float lightDist = length( lightDirection );
+	lightDirection = lightDirection / lightDist;
+	float attenuation = 1.0 / ( ConstantAttenuation +
+							   LinearAttenuation * lightDist +
+							   QuadraticAttenuation * lightDist * lightDist );
+	
+	// the direction of maximum highlight also changes per fragment
+	vec3 halfVector = normalize(lightDirection + uEyeDirection);
+	float diffuse = max(0.0, dot(normal, lightDirection));
+	float specular = max(0.0, dot(normal, halfVector));
+	if (diffuse == 0.0)
+		specular = 0.0;
+	else
+		specular = pow(specular, uShininess) * uStrength;
+	vec3 scatteredLight = lightIntensities * diffuse * attenuation;
+	vec3 reflectedLight = lightIntensities * specular * attenuation;
+	vec3 rgb = min(scatteredLight + reflectedLight, vec3(1.0));
+	
+	return rgb;*/
+}
+
 
 void main()
 {
@@ -75,6 +164,19 @@ void main()
 	vec3 reflectedLight = lightColor * specular * uStrength;
 //	vec3 reflectedLight = lightColor * 0.0;
 	
+	// ----
+//	vec3 normal = normalize( cross( dFdx(pos), dFdy(pos) ) );	// for flat shading
+	vec3 surfaceModelPosition = vVertexIn.mvPos;
+	vec3 surfaceToCamera = normalize( -surfaceModelPosition );
+/*
+	vec3 linearColor = vec3(0);
+	for(int i = 0; i < uNumLights; ++i){
+		linearColor += ApplyLight( uLights[i], uAmbient, N, surfaceModelPosition, surfaceToCamera);
+	}
+	
+	vec3 gamma = vec3(1.0/2.2);
+	linearColor = pow(linearColor, gamma);*/
+	// ----
 
 	
 	
@@ -86,8 +188,13 @@ void main()
 	
 	// blend between edge color and face color
 	vec3 vFaceColor = min( scatteredLight + reflectedLight, vec3(1.0) );
-	vec3 ptColor1 = pointLight( vVertexIn.mvPos, vVertexIn.normal, vVertexIn.light1pos, uPointLight1Color );
+//	vec3 vFaceColor = min( linearColor, vec3(1.0) );
+	
+	vec3 ptColor1 = pointLight( vVertexIn.mvPos, vVertexIn.normal, uLights[0] );
+//	vec3 ptColor1 = ApplyLight( uLights[0], uAmbient, N, vVertexIn.mvPos, surfaceToCamera );
+//	vec3 ptColor1 = ApplyLight( uLights[0], scatteredLight, vVertexIn.normal, vVertexIn.mvPos, surfaceToCamera );
 	vFaceColor += ptColor1;
+//	vFaceColor += linearColor;
 	
 	vec3 vEdgeColor = min(vec3( 0.22, 0.65, 0.87 ) + reflectedLight, vec3( 1.0 ) );
 	vEdgeColor += uLightColor * diffuse;
@@ -97,4 +204,7 @@ void main()
 
 	
 	oFragColor = vec4(rgb, 0.9);
+//	oFragColor = vec4(ptColor1, 0.9);
+//	oFragColor = vec4(scatteredLight, 0.9);
+//	oFragColor = vec4(linearColor, 0.9);
 }
